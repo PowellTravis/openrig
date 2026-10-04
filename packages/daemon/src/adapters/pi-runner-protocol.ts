@@ -152,6 +152,16 @@ export const OMP_PROVIDER_ENV_VARS: Record<string, string> = {
   litellm: "LITELLM_API_KEY",
 };
 
+/** Providers whose credential is a (key, endpoint) PAIR. A self-hosted proxy or
+ *  gateway issues a key that is only valid against its own base URL, so sending
+ *  the key alone hands the seat an unusable credential. This is the OMP-side
+ *  counterpart of the ANTHROPIC_BASE_URL / OPENAI_BASE_URL pairing that
+ *  startup's KNOWN_PROVIDER_AUTH_ENV already makes. Extending this map is a
+ *  reviewed change, never a convenience edit. */
+export const OMP_PROVIDER_EXTRA_ENV_VARS: Record<string, readonly string[]> = {
+  litellm: ["LITELLM_BASE_URL"],
+};
+
 // Baseline process needs. No host credential families or shell customization.
 export const PI_ENV_BASELINE_VARS = ["PATH", "HOME", "USER", "LOGNAME", "TERM", "LANG", "LC_ALL", "SHELL", "TMPDIR"] as const;
 
@@ -191,6 +201,13 @@ export function buildPiChildEnv(
   const providerVar = provider ? (opts.runtime === "omp" ? OMP_PROVIDER_ENV_VARS : PI_PROVIDER_ENV_VARS)[provider] : undefined;
   if (providerVar && source[providerVar] !== undefined) {
     env[providerVar] = source[providerVar]!;
+  }
+  // The declared provider's endpoint, for the providers whose key is scoped to one.
+  if (opts.runtime === "omp" && provider) {
+    for (const extra of OMP_PROVIDER_EXTRA_ENV_VARS[provider] ?? []) {
+      const value = source[extra];
+      if (value !== undefined) env[extra] = value;
+    }
   }
   if (opts.runtime === "omp") {
     // The per-seat HOME prevents OMP from consulting the operator's ~/.omp

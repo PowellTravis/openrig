@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RunnerCore, parseRunnerArgs, resolveRuntimeExecutable, type ExecutableResolverOps, type RunnerIo } from "../src/adapters/pi-runner.js";
-import { buildPiChildArgs, buildPiChildEnv, buildPiRunnerCommand, OMP_PROVIDER_ENV_VARS, type PiRunnerState } from "../src/adapters/pi-runner-protocol.js";
+import { buildPiChildArgs, buildPiChildEnv, buildPiRunnerCommand, OMP_PROVIDER_ENV_VARS, OMP_PROVIDER_EXTRA_ENV_VARS, type PiRunnerState } from "../src/adapters/pi-runner-protocol.js";
 import { collectAllowlistedProviderAuthEnv } from "../src/startup.js";
 
 const sessionName = "omp-worker@rig";
@@ -78,6 +78,40 @@ describe("OMP runner command and child isolation", () => {
     // Every other runtime keeps main's set: OMP-only names are not admitted.
     expect(collectAllowlistedProviderAuthEnv("MISTRAL_API_KEY,ANTHROPIC_API_KEY", { MISTRAL_API_KEY: "m", ANTHROPIC_API_KEY: "a" })).toEqual({ ANTHROPIC_API_KEY: "a" });
     expect(collectAllowlistedProviderAuthEnv("AWS_SECRET_ACCESS_KEY", { AWS_SECRET_ACCESS_KEY: "x" }, "omp")).toEqual({});
+  });
+
+  it("admits a paired provider endpoint alongside its key, for OMP seats only", () => {
+    const env = { LITELLM_API_KEY: "proxy-key", LITELLM_BASE_URL: "https://llm.internal/v1" };
+    expect(collectAllowlistedProviderAuthEnv("LITELLM_API_KEY,LITELLM_BASE_URL", env, "omp")).toEqual(env);
+    // Still double opt-in: an unnamed endpoint stays behind.
+    expect(collectAllowlistedProviderAuthEnv("LITELLM_API_KEY", env, "omp")).toEqual({ LITELLM_API_KEY: "proxy-key" });
+    expect(collectAllowlistedProviderAuthEnv("LITELLM_API_KEY,LITELLM_BASE_URL", env)).toEqual({});
+  });
+
+  it("forwards the declared provider's endpoint into an OMP child, and no other provider's", () => {
+    const source = {
+      PATH: "/usr/bin",
+      HOME: "/operator",
+      LITELLM_API_KEY: "proxy-key",
+      LITELLM_BASE_URL: "https://llm.internal/v1",
+    };
+    const opts = { agentDir: "/openrig/state/omp/seat/agent", sessionsDir: "/openrig/state/omp/seat/sessions", sessionName };
+    expect(buildPiChildEnv(source, { ...opts, runtime: "omp", model: "litellm/gpt-oss:120b" })).toMatchObject({
+      LITELLM_API_KEY: "proxy-key",
+      LITELLM_BASE_URL: "https://llm.internal/v1",
+    });
+    // A different declared provider carries neither half of the pair.
+    expect(buildPiChildEnv(source, { ...opts, runtime: "omp", model: "anthropic/claude-sonnet-4-5" }))
+      .not.toHaveProperty("LITELLM_BASE_URL");
+    // Pi keeps its own narrower map: no OMP endpoint crosses.
+    expect(buildPiChildEnv(source, { ...opts, runtime: "pi", model: "litellm/gpt-oss:120b" }))
+      .not.toHaveProperty("LITELLM_BASE_URL");
+  });
+
+  it("keeps every paired endpoint attached to a provider the runner can declare", () => {
+    for (const provider of Object.keys(OMP_PROVIDER_EXTRA_ENV_VARS)) {
+      expect(OMP_PROVIDER_ENV_VARS[provider]).toBeDefined();
+    }
   });
 });
 
