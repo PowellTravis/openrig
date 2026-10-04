@@ -113,6 +113,48 @@ describe("OMP runner command and child isolation", () => {
       expect(OMP_PROVIDER_ENV_VARS[provider]).toBeDefined();
     }
   });
+
+  it("names every paired endpoint after its own provider's key variable", () => {
+    // A typo here would silently forward another provider's endpoint, or none.
+    for (const [provider, extras] of Object.entries(OMP_PROVIDER_EXTRA_ENV_VARS)) {
+      const keyVar = OMP_PROVIDER_ENV_VARS[provider]!;
+      expect(keyVar).toMatch(/_API_KEY$/);
+      expect(extras).toEqual([keyVar.replace(/_API_KEY$/, "_BASE_URL")]);
+    }
+  });
+
+  it("carries each paired provider's endpoint, and only that provider's", () => {
+    const source: Record<string, string> = { PATH: "/usr/bin", HOME: "/operator" };
+    for (const extras of Object.values(OMP_PROVIDER_EXTRA_ENV_VARS)) {
+      for (const name of extras) source[name] = `endpoint-of-${name}`;
+    }
+    for (const [provider, keyVar] of Object.entries(OMP_PROVIDER_ENV_VARS)) {
+      source[keyVar] = `key-of-${keyVar}`;
+    }
+    for (const provider of Object.keys(OMP_PROVIDER_ENV_VARS)) {
+      const env = buildPiChildEnv(source, {
+        runtime: "omp", agentDir: "/s/agent", sessionsDir: "/s/sessions", sessionName,
+        model: `${provider}/some-model`,
+      });
+      const mine = OMP_PROVIDER_EXTRA_ENV_VARS[provider] ?? [];
+      for (const name of mine) expect(env[name]).toBe(`endpoint-of-${name}`);
+      // No other provider's endpoint rides along.
+      const others = Object.entries(OMP_PROVIDER_EXTRA_ENV_VARS)
+        .filter(([p]) => p !== provider).flatMap(([, v]) => v)
+        .filter((name) => !mine.includes(name));
+      for (const name of others) expect(env).not.toHaveProperty(name);
+    }
+  });
+
+  it("admits every paired endpoint through the OMP allowlist gate, and no other runtime's", () => {
+    const names = Object.values(OMP_PROVIDER_EXTRA_ENV_VARS).flat();
+    const env = Object.fromEntries(names.map((name) => [name, `value-of-${name}`]));
+    expect(collectAllowlistedProviderAuthEnv(names.join(","), env, "omp")).toEqual(env);
+    // Pi/Claude/Codex seats keep main's set: only the two already in
+    // KNOWN_PROVIDER_AUTH_ENV cross, the OMP-only endpoints do not.
+    const nonOmp = collectAllowlistedProviderAuthEnv(names.join(","), env);
+    expect(Object.keys(nonOmp).sort()).toEqual(["ANTHROPIC_BASE_URL", "OPENAI_BASE_URL"]);
+  });
 });
 
 describe("OMP executable resolution before the seat HOME applies", () => {

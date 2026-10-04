@@ -152,13 +152,25 @@ export const OMP_PROVIDER_ENV_VARS: Record<string, string> = {
   litellm: "LITELLM_API_KEY",
 };
 
-/** Providers whose credential is a (key, endpoint) PAIR. A self-hosted proxy or
- *  gateway issues a key that is only valid against its own base URL, so sending
- *  the key alone hands the seat an unusable credential. This is the OMP-side
- *  counterpart of the ANTHROPIC_BASE_URL / OPENAI_BASE_URL pairing that
- *  startup's KNOWN_PROVIDER_AUTH_ENV already makes. Extending this map is a
- *  reviewed change, never a convenience edit. */
+/** Providers whose credential is a (key, endpoint) PAIR. A gateway, proxy or
+ *  compatible endpoint issues a key that is only valid against one base URL, so
+ *  sending the key alone hands the seat an unusable credential. startup's
+ *  KNOWN_PROVIDER_AUTH_ENV already makes this pairing for ANTHROPIC_BASE_URL and
+ *  OPENAI_BASE_URL; those reach a seat's launch env but die at the child
+ *  boundary below without an entry here.
+ *
+ *  Every entry is a variable OMP itself reads, and each one is the provider's
+ *  key variable with _API_KEY swapped for _BASE_URL (asserted in omp-runner
+ *  tests). A provider gets an entry only once OMP is known to honor the
+ *  endpoint — extending this map is a reviewed change, never a convenience
+ *  edit, and the other OMP providers deliberately have none. */
 export const OMP_PROVIDER_EXTRA_ENV_VARS: Record<string, readonly string[]> = {
+  anthropic: ["ANTHROPIC_BASE_URL"],
+  openai: ["OPENAI_BASE_URL"],
+  openrouter: ["OPENROUTER_BASE_URL"],
+  xai: ["XAI_BASE_URL"],
+  moonshot: ["MOONSHOT_BASE_URL"],
+  deepinfra: ["DEEPINFRA_BASE_URL"],
   litellm: ["LITELLM_BASE_URL"],
 };
 
