@@ -146,6 +146,18 @@ describe("OMP runner command and child isolation", () => {
     }
   });
 
+  it("admits an endpoint named without its key, for a keyless local proxy", () => {
+    // Each allowlisted name stands alone; the pair is a convention, not a coupling.
+    expect(collectAllowlistedProviderAuthEnv("LITELLM_BASE_URL", { LITELLM_BASE_URL: "http://localhost:4000/v1" }, "omp"))
+      .toEqual({ LITELLM_BASE_URL: "http://localhost:4000/v1" });
+    const env = buildPiChildEnv(
+      { PATH: "/usr/bin", HOME: "/operator", LITELLM_BASE_URL: "http://localhost:4000/v1" },
+      { runtime: "omp", agentDir: "/s/agent", sessionsDir: "/s/sessions", sessionName, model: "litellm/local" },
+    );
+    expect(env.LITELLM_BASE_URL).toBe("http://localhost:4000/v1");
+    expect(env).not.toHaveProperty("LITELLM_API_KEY");
+  });
+
   it("admits every paired endpoint through the OMP allowlist gate, and no other runtime's", () => {
     const names = Object.values(OMP_PROVIDER_EXTRA_ENV_VARS).flat();
     const env = Object.fromEntries(names.map((name) => [name, `value-of-${name}`]));

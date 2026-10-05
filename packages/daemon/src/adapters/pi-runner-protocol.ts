@@ -159,18 +159,16 @@ export const OMP_PROVIDER_ENV_VARS: Record<string, string> = {
  *  OPENAI_BASE_URL; those reach a seat's launch env but die at the child
  *  boundary below without an entry here.
  *
- *  Every entry is a variable OMP itself reads, and each one is the provider's
- *  key variable with _API_KEY swapped for _BASE_URL (asserted in omp-runner
- *  tests). A provider gets an entry only once OMP is known to honor the
- *  endpoint — extending this map is a reviewed change, never a convenience
- *  edit, and the other OMP providers deliberately have none. */
+ *  Each entry is the provider's key variable with _API_KEY swapped for _BASE_URL
+ *  (asserted in omp-runner tests). The bar for an entry is that OMP's CHAT
+ *  provider reads that variable as an endpoint override: a base URL OMP holds
+ *  as a fixed constant, or reads only in another package, earns none —
+ *  forwarding it would do nothing, or would mislead someone pointing chat at a
+ *  proxy. Extending this map is a reviewed change, never a convenience edit,
+ *  and the other OMP providers deliberately have none. */
 export const OMP_PROVIDER_EXTRA_ENV_VARS: Record<string, readonly string[]> = {
   anthropic: ["ANTHROPIC_BASE_URL"],
   openai: ["OPENAI_BASE_URL"],
-  openrouter: ["OPENROUTER_BASE_URL"],
-  xai: ["XAI_BASE_URL"],
-  moonshot: ["MOONSHOT_BASE_URL"],
-  deepinfra: ["DEEPINFRA_BASE_URL"],
   litellm: ["LITELLM_BASE_URL"],
 };
 
